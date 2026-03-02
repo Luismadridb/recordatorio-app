@@ -9,25 +9,30 @@ const cron = require("node-cron");
 const twilio = require("twilio");
 const cors = require("cors");
 
+const path = require("path");
+
 const app = express();
 app.use(cors()); // Permitir que la App móvil se conecte desde internet
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // Servir frontend (antes de la seguridad para que cargue el login y el CSS)
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── SEGURIDAD ────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "iglesia123";
 
 // Middleware de autenticación simple para la API
 const authMiddleware = (req, res, next) => {
-  // Excluir rutas públicas y la ruta de login de la autenticación
+  // Excluir rutas públicas y de archivos estáticos
+  const publicExtensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json', '.html', '.ico'];
+  const isStaticFile = publicExtensions.some(ext => req.path.endsWith(ext));
+
   if (
     req.path === "/webhook" ||
     req.path === "/login" ||
     req.path === "/" ||
-    req.path.includes(".") // Permite archivos estáticos ( .css, .js, .png, etc)
+    isStaticFile
   ) {
     return next();
   }

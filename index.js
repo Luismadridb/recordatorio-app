@@ -59,6 +59,9 @@ app.post("/login", (req, res) => {
   }
 });
 
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // ─── PostgreSQL ───────────────────────────────────────────────────────────────
 const pool = new Pool({

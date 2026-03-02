@@ -14,13 +14,21 @@ app.use(cors()); // Permitir que la App móvil se conecte desde internet
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+// Servir frontend (antes de la seguridad para que cargue el login y el CSS)
+app.use(express.static('public'));
+
 // ─── SEGURIDAD ────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "iglesia123";
 
 // Middleware de autenticación simple para la API
 const authMiddleware = (req, res, next) => {
-  // Excluir el webhook de Twilio y la ruta de login de la autenticación por cabecera
-  if (req.path === "/webhook" || req.path === "/login" || req.path === "/" || req.path.startsWith("/public")) {
+  // Excluir rutas públicas y la ruta de login de la autenticación
+  if (
+    req.path === "/webhook" ||
+    req.path === "/login" ||
+    req.path === "/" ||
+    req.path.includes(".") // Permite archivos estáticos ( .css, .js, .png, etc)
+  ) {
     return next();
   }
 
@@ -43,9 +51,6 @@ app.post("/login", (req, res) => {
     res.status(401).json({ error: "Contraseña incorrecta" });
   }
 });
-
-// Servir frontend
-app.use(express.static('public'));
 
 
 // ─── PostgreSQL ───────────────────────────────────────────────────────────────
@@ -81,10 +86,6 @@ app.use((req, res, next) => {
 });
 
 // ─── Rutas ────────────────────────────────────────────────────────────────────
-
-app.get("/", (req, res) => {
-  res.json({ status: "ok", mensaje: "Sistema de Predicadores ⛪ Funcionando 🔥" });
-});
 
 // ─── CRUD PREDICADORES ────────────────────────────────────────────────────────
 

@@ -2,7 +2,8 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LOCAL_IP = '172.20.10.2';
-const BASE_URL = `http://${LOCAL_IP}:3000`;
+const BASE_URL = 'https://recordatorio-app.onrender.com';
+
 
 const api = axios.create({
     baseURL: BASE_URL,

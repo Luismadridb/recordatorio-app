@@ -34,6 +34,7 @@ const authMiddleware = (req, res, next) => {
     req.path === "/" ||
     isStaticFile
   ) {
+    console.log(`[Auth] Liberando ruta pública: ${req.path}`);
     return next();
   }
 
@@ -41,6 +42,7 @@ const authMiddleware = (req, res, next) => {
   if (authHeader === ADMIN_PASSWORD) {
     next();
   } else {
+    console.log(`[Auth] Bloqueando acceso privado: ${req.path}`);
     res.status(401).json({ error: "No autorizado. Contraseña incorrecta." });
   }
 };

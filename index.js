@@ -8,7 +8,6 @@ const { Pool } = require("pg");
 const cron = require("node-cron");
 const twilio = require("twilio");
 const cors = require("cors");
-
 const path = require("path");
 
 const app = express();
@@ -16,25 +15,19 @@ app.use(cors()); // Permitir que la App móvil se conecte desde internet
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
-// Servir frontend (antes de la seguridad para que cargue el login y el CSS)
+// 1. SERVIR ARCHIVOS ESTÁTICOS (CRUCIAL: Antes de cualquier middleware de seguridad)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── SEGURIDAD ────────────────────────────────────────────────────────────────
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "iglesia123";
 
-// Middleware de autenticación simple para la API
+// Middleware de autenticación mejorado
 const authMiddleware = (req, res, next) => {
-  // Excluir rutas públicas y de archivos estáticos
-  const publicExtensions = ['.css', '.js', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json', '.html', '.ico'];
-  const isStaticFile = publicExtensions.some(ext => req.path.endsWith(ext));
+  // Solo protegemos las rutas de API
+  const apiRoutes = ['/predicadores', '/asignaciones', '/recordatorios'];
+  const isApiRoute = apiRoutes.some(route => req.path.startsWith(route));
 
-  if (
-    req.path === "/webhook" ||
-    req.path === "/login" ||
-    req.path === "/" ||
-    isStaticFile
-  ) {
-    console.log(`[Auth] Liberando ruta pública: ${req.path}`);
+  if (!isApiRoute || req.path === "/login" || req.path === "/webhook") {
     return next();
   }
 
@@ -42,12 +35,17 @@ const authMiddleware = (req, res, next) => {
   if (authHeader === ADMIN_PASSWORD) {
     next();
   } else {
-    console.log(`[Auth] Bloqueando acceso privado: ${req.path}`);
+    console.log(`[Auth] Bloqueando acceso a API: ${req.path}`);
     res.status(401).json({ error: "No autorizado. Contraseña incorrecta." });
   }
 };
 
 app.use(authMiddleware);
+
+// Ruta raíz explícita
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Endpoint de Login
 app.post("/login", (req, res) => {
@@ -57,10 +55,6 @@ app.post("/login", (req, res) => {
   } else {
     res.status(401).json({ error: "Contraseña incorrecta" });
   }
-});
-
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // ─── PostgreSQL ───────────────────────────────────────────────────────────────

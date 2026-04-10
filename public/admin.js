@@ -60,21 +60,42 @@ function formatJustDate(dateString) {
     return date.toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-// --- Fetch de Datos Centralizados ---
+// --- Fetch y Seguridad Centralizada ---
 let state = {
     predicadores: [],
     asignaciones: [],
     recordatorios: []
 };
 
+// Obtener clave de la memoria del navegador
+let ADMIN_PASSWORD = localStorage.getItem('admin_password') || '';
+
 async function fetchData(endpoint) {
     try {
-        const res = await fetch(`${API_URL}${endpoint}`);
+        const res = await fetch(`${API_URL}${endpoint}`, {
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-password': ADMIN_PASSWORD
+            }
+        });
+        
+        if (res.status === 401) {
+            // Si la clave es incorrecta o falta, pedirla al usuario
+            const pass = prompt("🔐 Acceso Restringido. Ingrese la contraseña del administrador:");
+            if (pass) {
+                localStorage.setItem('admin_password', pass);
+                ADMIN_PASSWORD = pass;
+                return await fetchData(endpoint); // reintentar
+            } else {
+                throw new Error("Contraseña requerida");
+            }
+        }
+        
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
         return await res.json();
     } catch (err) {
         console.error(`Error fetching ${endpoint}:`, err);
-        showToast(`Error de conexión con el servidor`, true);
+        showToast(`Error de conexión o permisos`, true);
         return [];
     }
 }
@@ -214,7 +235,7 @@ document.getElementById('form-hermano').addEventListener('submit', async (e) => 
     try {
         const res = await fetch(`${API_URL}/predicadores`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
             body: JSON.stringify({ nombre, telefono, solo_tarde })
         });
 
@@ -237,7 +258,7 @@ async function updateDisponibilidad(id, value) {
     try {
         const res = await fetch(`${API_URL}/predicadores/${id}/disponibilidad`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
             body: JSON.stringify({ solo_tarde })
         });
 
@@ -261,7 +282,8 @@ async function deletePredicador(id, nombre) {
 
     try {
         const res = await fetch(`${API_URL}/predicadores/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: { 'x-admin-password': ADMIN_PASSWORD }
         });
 
         if (res.ok) {
@@ -305,7 +327,7 @@ document.getElementById('form-asignacion').addEventListener('submit', async (e) 
     try {
         const res = await fetch(`${API_URL}/asignaciones`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
             body: JSON.stringify({ predicador_id, fecha_sabado, hora_culto })
         });
 
@@ -375,7 +397,7 @@ document.getElementById('form-sorteo').addEventListener('submit', async (e) => {
             try {
                 const res = await fetch(`${API_URL}/asignaciones`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
                     body: JSON.stringify({ predicador_id: ganador.id, fecha_sabado, hora_culto })
                 });
 
@@ -414,7 +436,8 @@ async function deleteAsignacion(id) {
 
     try {
         const res = await fetch(`${API_URL}/asignaciones/${id}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: { 'x-admin-password': ADMIN_PASSWORD }
         });
 
         if (res.ok) {

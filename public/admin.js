@@ -1,6 +1,48 @@
 // Base URL for API
 const API_URL = ''; // Same origin
 
+// --- Seguridad e Identidad ---
+let ADMIN_PASSWORD = localStorage.getItem('admin_password') || '';
+
+// Función maestra para todas las peticiones (GET, POST, etc)
+async function apiRequest(endpoint, options = {}) {
+    const defaultHeaders = {
+        'Content-Type': 'application/json',
+        'x-admin-password': ADMIN_PASSWORD
+    };
+
+    try {
+        const res = await fetch(`${API_URL}${endpoint}`, {
+            ...options,
+            headers: { ...defaultHeaders, ...options.headers }
+        });
+
+        // Si el servidor dice que no tenemos permiso (401)
+        if (res.status === 401) {
+            const pass = prompt("🔐 Acceso Protegido - Iglesia App\n\nIngrese la contraseña de administrador para continuar:");
+            if (pass) {
+                localStorage.setItem('admin_password', pass);
+                ADMIN_PASSWORD = pass;
+                // Reintentar la misma petición con la nueva clave
+                return await apiRequest(endpoint, options);
+            } else {
+                throw new Error("Contraseña requerida para esta acción.");
+            }
+        }
+
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}));
+            throw new Error(errorData.error || `Error del servidor (${res.status})`);
+        }
+
+        return await res.json();
+    } catch (err) {
+        console.error(`[API Error] ${endpoint}:`, err);
+        showToast(err.message || 'Error de conexión', true);
+        throw err; // Propagar para manejo específico si es necesario
+    }
+}
+
 // --- Navegación SPA ---
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -30,7 +72,7 @@ function showToast(message, isError = false) {
 
     setTimeout(() => {
         toast.className = 'toast';
-    }, 3000);
+    }, 3500);
 }
 
 function openModal(id) {
@@ -42,7 +84,8 @@ function openModal(id) {
 
 function closeModal(id) {
     document.getElementById(id).classList.remove('active');
-    document.querySelector(`#${id} form`).reset();
+    const form = document.querySelector(`#${id} form`);
+    if (form) form.reset();
 }
 
 function formatDate(isoString) {
@@ -54,169 +97,139 @@ function formatDate(isoString) {
 }
 
 function formatJustDate(dateString) {
-    // Si la BD devuelve "2026-02-28T00:00:00.000Z", extraemos solo "2026-02-28" 
     const isodate = dateString.split('T')[0];
     const date = new Date(isodate + 'T00:00:00');
     return date.toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-// --- Fetch y Seguridad Centralizada ---
+// --- Estado local ---
 let state = {
     predicadores: [],
     asignaciones: [],
     recordatorios: []
 };
 
-// Obtener clave de la memoria del navegador
-let ADMIN_PASSWORD = localStorage.getItem('admin_password') || '';
-
-async function fetchData(endpoint) {
-    try {
-        const res = await fetch(`${API_URL}${endpoint}`, {
-            headers: {
-                'Content-Type': 'application/json',
-                'x-admin-password': ADMIN_PASSWORD
-            }
-        });
-        
-        if (res.status === 401) {
-            // Si la clave es incorrecta o falta, pedirla al usuario
-            const pass = prompt("🔐 Acceso Restringido. Ingrese la contraseña del administrador:");
-            if (pass) {
-                localStorage.setItem('admin_password', pass);
-                ADMIN_PASSWORD = pass;
-                return await fetchData(endpoint); // reintentar
-            } else {
-                throw new Error("Contraseña requerida");
-            }
-        }
-        
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        return await res.json();
-    } catch (err) {
-        console.error(`Error fetching ${endpoint}:`, err);
-        showToast(`Error de conexión o permisos`, true);
-        return [];
-    }
-}
 
 // --- Carga de Vistas ---
 
 async function loadDashboard() {
-    const p = await fetchData('/predicadores');
-    const a = await fetchData('/asignaciones');
-    const r = await fetchData('/recordatorios');
+    try {
+        const p = await apiRequest('/predicadores');
+        const a = await apiRequest('/asignaciones');
+        const r = await apiRequest('/recordatorios');
 
-    document.getElementById('stat-hermanos').textContent = p.length;
+        document.getElementById('stat-hermanos').textContent = p.length;
 
-    // Proximo culto (el primero en el futuro o más reciente)
-    const futuros = a.filter(asig => new Date(asig.fecha_sabado) >= new Date());
-    if (futuros.length > 0) {
-        futuros.sort((a, b) => new Date(a.fecha_sabado) - new Date(b.fecha_sabado));
-        document.getElementById('stat-proximo').textContent = formatJustDate(futuros[0].fecha_sabado);
-    } else {
-        document.getElementById('stat-proximo').textContent = "Sin agendar";
-    }
+        const futuros = a.filter(asig => new Date(asig.fecha_sabado) >= new Date().setHours(0,0,0,0));
+        if (futuros.length > 0) {
+            futuros.sort((a, b) => new Date(a.fecha_sabado) - new Date(b.fecha_sabado));
+            document.getElementById('stat-proximo').textContent = formatJustDate(futuros[0].fecha_sabado);
+        } else {
+            document.getElementById('stat-proximo').textContent = "Sin agendar";
+        }
 
-    // Pendientes
-    const pendientes = r.filter(rec => !rec.enviado && rec.intentos < 3).length;
-    document.getElementById('stat-pendientes').textContent = pendientes;
+        const pendientes = r.filter(rec => !rec.enviado && rec.intentos < 3).length;
+        document.getElementById('stat-pendientes').textContent = pendientes;
+    } catch (e) { /* Error ya manejado en apiRequest */ }
 }
 
 async function loadPredicadores() {
-    const res = await fetchData('/predicadores');
-    state.predicadores = res;
+    try {
+        const res = await apiRequest('/predicadores');
+        state.predicadores = res;
 
-    const tbody = document.querySelector('#table-predicadores tbody');
-    tbody.innerHTML = '';
+        const tbody = document.querySelector('#table-predicadores tbody');
+        tbody.innerHTML = '';
 
-    if (res.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">No hay hermanos registrados aún.</td></tr>';
-        return;
-    }
+        if (res.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">No hay hermanos registrados aún.</td></tr>';
+            return;
+        }
 
-    res.forEach((p, index) => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-      <td data-label="ID">#${index + 1}</td>
-      <td data-label="Nombre" style="font-weight:600">${p.nombre}</td>
-      <td data-label="Teléfono">${p.telefono}</td>
-      <td data-label="Disponibilidad">
-        <select class="select-inline" onchange="updateDisponibilidad(${p.id}, this.value)">
-            <option value="false" ${!p.solo_tarde ? 'selected' : ''}>Día Completo</option>
-            <option value="true" ${p.solo_tarde ? 'selected' : ''}>Solo Despedida (19:00)</option>
-        </select>
-      </td>
-      <td data-label="Estado"><span class="badge ${p.activo ? 'success' : 'error'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
-      <td data-label="Acciones"><button class="btn-text" style="color:var(--error); padding:0; font-size:0.9rem;" onclick="deletePredicador(${p.id}, '${p.nombre}')">🗑️ Eliminar</button></td>
-    `;
-        tbody.appendChild(tr);
-    });
+        res.forEach((p, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td data-label="ID">#${index + 1}</td>
+                <td data-label="Nombre" style="font-weight:600">${p.nombre}</td>
+                <td data-label="Teléfono">${p.telefono}</td>
+                <td data-label="Disponibilidad">
+                    <select class="select-inline" onchange="updateDisponibilidad(${p.id}, this.value)">
+                        <option value="false" ${!p.solo_tarde ? 'selected' : ''}>Día Completo</option>
+                        <option value="true" ${p.solo_tarde ? 'selected' : ''}>Solo Despedida (19:00)</option>
+                    </select>
+                </td>
+                <td data-label="Estado"><span class="badge ${p.activo ? 'success' : 'error'}">${p.activo ? 'Activo' : 'Inactivo'}</span></td>
+                <td data-label="Acciones"><button class="btn-text" style="color:var(--error); padding:0; font-size:0.9rem;" onclick="deletePredicador(${p.id}, '${p.nombre}')">🗑️ Eliminar</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {}
 }
 
 async function loadAsignaciones() {
-    const res = await fetchData('/asignaciones');
-    const tbody = document.querySelector('#table-asignaciones tbody');
-    tbody.innerHTML = '';
+    try {
+        const res = await apiRequest('/asignaciones');
+        const tbody = document.querySelector('#table-asignaciones tbody');
+        tbody.innerHTML = '';
 
-    if (res.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">No hay cultos programados.</td></tr>';
-        return;
-    }
+        if (res.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">No hay cultos programados.</td></tr>';
+            return;
+        }
 
-    res.forEach((a, index) => {
-        const statusBadge = {
-            'pendiente': '<span class="badge warning">⏳ Pendiente</span>',
-            'confirmado': '<span class="badge success">✅ Confirmado</span>',
-            'rechazado': '<span class="badge error">❌ Rechazado</span>'
-        }[a.estado] || `<span class="badge">${a.estado}</span>`;
+        res.forEach((a, index) => {
+            const statusBadge = {
+                'pendiente': '<span class="badge warning">⏳ Pendiente</span>',
+                'confirmado': '<span class="badge success">✅ Confirmado</span>',
+                'rechazado': '<span class="badge error">❌ Rechazado</span>'
+            }[a.estado] || `<span class="badge">${a.estado}</span>`;
 
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-      <td data-label="ID">#${index + 1}</td>
-      <td data-label="Predicador" style="font-weight:600">${a.predicador_nombre}</td>
-      <td data-label="Sábado">${formatJustDate(a.fecha_sabado)}</td>
-      <td data-label="Hora"><span class="badge info">${a.hora_culto}</span></td>
-      <td data-label="Estado">${statusBadge}</td>
-      <td data-label="Acciones"><button class="btn-text" style="color:var(--error); padding:0; font-size:0.9rem;" onclick="deleteAsignacion(${a.id})">🗑️ Eliminar</button></td>
-    `;
-        tbody.appendChild(tr);
-    });
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td data-label="ID">#${index + 1}</td>
+                <td data-label="Predicador" style="font-weight:600">${a.predicador_nombre}</td>
+                <td data-label="Sábado">${formatJustDate(a.fecha_sabado)}</td>
+                <td data-label="Hora"><span class="badge info">${a.hora_culto}</span></td>
+                <td data-label="Estado">${statusBadge}</td>
+                <td data-label="Acciones"><button class="btn-text" style="color:var(--error); padding:0; font-size:0.9rem;" onclick="deleteAsignacion(${a.id})">🗑️ Eliminar</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {}
 }
 
 async function loadMensajes() {
-    const res = await fetchData('/recordatorios');
-    // Ordenar por más recientes primero
-    res.sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
+    try {
+        const res = await apiRequest('/recordatorios');
+        res.sort((a, b) => new Date(b.creado_en) - new Date(a.creado_en));
 
-    const tbody = document.querySelector('#table-mensajes tbody');
-    tbody.innerHTML = '';
+        const tbody = document.querySelector('#table-mensajes tbody');
+        tbody.innerHTML = '';
 
-    if (res.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">No hay mensajes en el sistema.</td></tr>';
-        return;
-    }
+        if (res.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-muted)">No hay mensajes en el sistema.</td></tr>';
+            return;
+        }
 
-    res.forEach((r, index) => {
-        const tr = document.createElement('tr');
+        res.forEach((r, index) => {
+            const tr = document.createElement('tr');
+            let estadoBadge = r.enviado 
+                ? '<span class="badge success">Enviado</span>' 
+                : (r.intentos >= 3 ? '<span class="badge error">Fallido</span>' : '<span class="badge warning">Pendiente</span>');
 
-        let estadoBadge = '';
-        if (r.enviado) estadoBadge = '<span class="badge success">Enviado</span>';
-        else if (r.intentos >= 3) estadoBadge = '<span class="badge error">Fallido</span>';
-        else estadoBadge = '<span class="badge warning">Pendiente</span>';
+            const errorDetalle = r.error_mensaje ? `<br><small style="color:var(--error); font-size:0.75rem">${r.error_mensaje.substring(0, 40)}...</small>` : '';
 
-        const errorDetalle = r.error_mensaje ? `<br><small style="color:var(--error); font-size:0.75rem">${r.error_mensaje.substring(0, 40)}...</small>` : '';
-
-        tr.innerHTML = `
-      <td data-label="ID">#${index + 1}</td>
-      <td data-label="Teléfono">${r.telefono}</td>
-      <td data-label="Título"><span class="badge info">${r.titulo}</span></td>
-      <td data-label="Envío">${formatDate(r.fecha_envio)}</td>
-      <td data-label="Estado">${estadoBadge}</td>
-      <td data-label="Detalle">Intentos: ${r.intentos}/3 ${errorDetalle}</td>
-    `;
-        tbody.appendChild(tr);
-    });
+            tr.innerHTML = `
+                <td data-label="ID">#${index + 1}</td>
+                <td data-label="Teléfono">${r.telefono}</td>
+                <td data-label="Título"><span class="badge info">${r.titulo}</span></td>
+                <td data-label="Envío">${formatDate(r.fecha_envio)}</td>
+                <td data-label="Estado">${estadoBadge}</td>
+                <td data-label="Detalle">Intentos: ${r.intentos}/3 ${errorDetalle}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (e) {}
 }
 
 // --- Formularios ---
@@ -227,95 +240,61 @@ document.getElementById('form-hermano').addEventListener('submit', async (e) => 
     let telefono = document.getElementById('h-tel').value;
     const solo_tarde = document.getElementById('h-solo-tarde').checked;
 
-    // Auto-agregar whatsapp: si el form no lo tiene
-    if (!telefono.startsWith('whatsapp:')) {
-        telefono = 'whatsapp:' + telefono;
-    }
+    if (!telefono.startsWith('whatsapp:')) telefono = 'whatsapp:' + telefono;
 
     try {
-        const res = await fetch(`${API_URL}/predicadores`, {
+        await apiRequest('/predicadores', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
             body: JSON.stringify({ nombre, telefono, solo_tarde })
         });
-
-        if (res.ok) {
-            showToast('Hermano registrado exitosamente');
-            closeModal('modal-hermano');
-            loadPredicadores();
-            loadDashboard();
-        } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al registrar', true);
-        }
-    } catch (err) {
-        showToast('Error de conexión', true);
-    }
+        showToast('Hermano registrado exitosamente');
+        closeModal('modal-hermano');
+        loadPredicadores();
+        loadDashboard();
+    } catch (err) {}
 });
 
 async function updateDisponibilidad(id, value) {
     const solo_tarde = (value === 'true');
     try {
-        const res = await fetch(`${API_URL}/predicadores/${id}/disponibilidad`, {
+        await apiRequest(`/predicadores/${id}/disponibilidad`, {
             method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
             body: JSON.stringify({ solo_tarde })
         });
-
-        if (res.ok) {
-            showToast('Disponibilidad actualizada');
-            // Actualizar estado local para que los sorteos funcionen sin recargar todo si es necesario
-            const pred = state.predicadores.find(p => p.id === id);
-            if (pred) pred.solo_tarde = solo_tarde;
-        } else {
-            showToast('Error al actualizar', true);
-        }
-    } catch (err) {
-        showToast('Error de conexión', true);
-    }
+        showToast('Disponibilidad actualizada');
+        const pred = state.predicadores.find(p => p.id === id);
+        if (pred) pred.solo_tarde = solo_tarde;
+    } catch (err) {}
 }
 
 async function deletePredicador(id, nombre) {
-    if (!confirm(`¿Estás seguro que deseas eliminar a ${nombre}? Esto también eliminará sus asignaciones futuras completas.`)) {
-        return;
-    }
-
+    if (!confirm(`¿Estás seguro que deseas eliminar a ${nombre}? Esto también eliminará sus asignaciones futuras.`)) return;
     try {
-        const res = await fetch(`${API_URL}/predicadores/${id}`, {
-            method: 'DELETE',
-            headers: { 'x-admin-password': ADMIN_PASSWORD }
-        });
-
-        if (res.ok) {
-            showToast('Hermano eliminado exitosamente');
-            loadPredicadores();
-            loadDashboard();
-        } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al eliminar', true);
-        }
-    } catch (err) {
-        showToast('Error de conexión', true);
-    }
+        await apiRequest(`/predicadores/${id}`, { method: 'DELETE' });
+        showToast('Hermano eliminado exitosamente');
+        loadPredicadores();
+        loadDashboard();
+    } catch (err) {}
 }
 
 async function populatePredicadoresSelect() {
     const select = document.getElementById('a-predicador');
     select.innerHTML = '<option value="">Cargando...</option>';
 
-    if (state.predicadores.length === 0) {
-        state.predicadores = await fetchData('/predicadores');
-    }
-
-    select.innerHTML = '<option value="" disabled selected>Selecciona un hermano</option>';
-    state.predicadores.forEach(p => {
-        if (p.activo) {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.nombre;
-            select.appendChild(opt);
+    try {
+        if (state.predicadores.length === 0) {
+            state.predicadores = await apiRequest('/predicadores');
         }
-    });
+        select.innerHTML = '<option value="" disabled selected>Selecciona un hermano</option>';
+        state.predicadores.forEach(p => {
+            if (p.activo) {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.nombre;
+                select.appendChild(opt);
+            }
+        });
+    } catch(e) {}
 }
 
 document.getElementById('form-asignacion').addEventListener('submit', async (e) => {
@@ -325,24 +304,15 @@ document.getElementById('form-asignacion').addEventListener('submit', async (e) 
     const hora_culto = document.getElementById('a-hora').value;
 
     try {
-        const res = await fetch(`${API_URL}/asignaciones`, {
+        await apiRequest('/asignaciones', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
             body: JSON.stringify({ predicador_id, fecha_sabado, hora_culto })
         });
-
-        if (res.ok) {
-            showToast('Culto asignado y recordatorios creados');
-            closeModal('modal-asignacion');
-            loadAsignaciones();
-            loadDashboard();
-        } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al asignar', true);
-        }
-    } catch (err) {
-        showToast('Error de conexión', true);
-    }
+        showToast('Culto asignado y recordatorios creados');
+        closeModal('modal-asignacion');
+        loadAsignaciones();
+        loadDashboard();
+    } catch (err) {}
 });
 
 document.getElementById('form-sorteo').addEventListener('submit', async (e) => {
@@ -351,18 +321,13 @@ document.getElementById('form-sorteo').addEventListener('submit', async (e) => {
     const hora_culto = document.getElementById('s-hora').value;
 
     let activos = state.predicadores.filter(p => p.activo);
-
-    // Filtro disponibilidad de horario
-    if (hora_culto !== "19:00") {
-        activos = activos.filter(p => !p.solo_tarde);
-    }
+    if (hora_culto !== "19:00") activos = activos.filter(p => !p.solo_tarde);
 
     if (activos.length === 0) {
         showToast('No hay hermanos disponibles para este horario', true);
         return;
     }
 
-    // UI states
     const ruletaContainer = document.getElementById('ruleta-container');
     const ruletaTexto = document.getElementById('ruleta-texto');
     const btnSubmit = document.getElementById('btn-submit-sorteo');
@@ -372,7 +337,6 @@ document.getElementById('form-sorteo').addEventListener('submit', async (e) => {
     btnSubmit.disabled = true;
     btnCancel.disabled = true;
 
-    // Animación de "ruleta"
     let iteraciones = 0;
     const maxIteraciones = 20;
     let ganador = null;
@@ -385,43 +349,29 @@ document.getElementById('form-sorteo').addEventListener('submit', async (e) => {
         if (iteraciones >= maxIteraciones) {
             clearInterval(intervalo);
             ganador = activos[randomIndex];
-
-            // Efecto final
             ruletaTexto.style.animation = 'none';
             ruletaTexto.style.color = '#fff';
             ruletaTexto.style.transform = 'scale(1.1)';
-            ruletaTexto.style.transition = 'all 0.3s ease';
             ruletaTexto.innerHTML = `🎉 ¡${ganador.nombre}! 🎉`;
 
-            // Enviar al Backend
             try {
-                const res = await fetch(`${API_URL}/asignaciones`, {
+                await apiRequest('/asignaciones', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
                     body: JSON.stringify({ predicador_id: ganador.id, fecha_sabado, hora_culto })
                 });
-
-                if (res.ok) {
-                    showToast('Sorteo finalizado y guardado exitosamente');
-                    setTimeout(() => {
-                        closeModal('modal-sorteo');
-                        loadAsignaciones();
-                        loadDashboard();
-
-                        // reset ui
-                        ruletaContainer.style.display = 'none';
-                        ruletaTexto.style.animation = 'parpadeo 0.2s infinite alternate';
-                        ruletaTexto.style.color = 'var(--primary)';
-                        ruletaTexto.style.transform = 'none';
-                        btnSubmit.disabled = false;
-                        btnCancel.disabled = false;
-                    }, 2500);
-
-                } else {
-                    throw new Error('Error al asignar');
-                }
+                showToast('Sorteo finalizado y guardado exitosamente');
+                setTimeout(() => {
+                    closeModal('modal-sorteo');
+                    loadAsignaciones();
+                    loadDashboard();
+                    ruletaContainer.style.display = 'none';
+                    ruletaTexto.style.animation = 'parpadeo 0.2s infinite alternate';
+                    ruletaTexto.style.color = 'var(--primary)';
+                    ruletaTexto.style.transform = 'none';
+                    btnSubmit.disabled = false;
+                    btnCancel.disabled = false;
+                }, 2500);
             } catch (err) {
-                showToast('Error de conexión al guardar el ganador', true);
                 btnSubmit.disabled = false;
                 btnCancel.disabled = false;
             }
@@ -430,27 +380,13 @@ document.getElementById('form-sorteo').addEventListener('submit', async (e) => {
 });
 
 async function deleteAsignacion(id) {
-    if (!confirm('¿Estás seguro de cancelar este culto? Se eliminarán los recordatorios de WhatsApp pendientes para este hermano.')) {
-        return;
-    }
-
+    if (!confirm('¿Estás seguro de cancelar este culto?')) return;
     try {
-        const res = await fetch(`${API_URL}/asignaciones/${id}`, {
-            method: 'DELETE',
-            headers: { 'x-admin-password': ADMIN_PASSWORD }
-        });
-
-        if (res.ok) {
-            showToast('Culto cancelado exitosamente');
-            loadAsignaciones();
-            loadDashboard();
-        } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al cancelar', true);
-        }
-    } catch (err) {
-        showToast('Error de conexión', true);
-    }
+        await apiRequest(`/asignaciones/${id}`, { method: 'DELETE' });
+        showToast('Culto cancelado exitosamente');
+        loadAsignaciones();
+        loadDashboard();
+    } catch (err) {}
 }
 
 // Init

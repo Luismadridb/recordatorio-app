@@ -1,13 +1,12 @@
-const CACHE_NAME = 'predicadores-v2';
+const CACHE_NAME = 'predicadores-v3';
 const ASSETS = [
     '/',
     '/index.html',
-    '/style.css',
-    '/admin.js?v=3',
+    '/app.css?v=1',
+    '/app.js?v=1',
     '/manifest.json'
 ];
 
-// Instalación: Limpia el caché viejo inmediatamente
 self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
@@ -17,7 +16,6 @@ self.addEventListener('install', (event) => {
     );
 });
 
-// Activación: Borra cachés antiguos
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys().then((cacheNames) => {
@@ -29,8 +27,8 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Estrategia: Network First (Priorizar red para ver cambios de inmediato)
 self.addEventListener('fetch', (event) => {
+    // Strategy: Network First
     event.respondWith(
         fetch(event.request).catch(() => {
             return caches.match(event.request);

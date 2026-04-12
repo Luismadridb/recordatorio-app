@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<!-- Iglesia App V1.2 -->
+<!-- Iglesia App V2.0 - UI Login Update -->
 <html lang="es">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Administrador - Predicadores ⛪</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Panel de Administrador - Iglesia App ⛪</title>
+    <link rel="stylesheet" href="app.css?v=1">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#4f46e5">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,16 +22,31 @@
 </head>
 
 <body>
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="modal-overlay">
+        <div class="modal login-card">
+            <div class="login-icon">🔐</div>
+            <h2>Acceso Protegido</h2>
+            <p>Ingrese la contraseña del panel administrativo para continuar.</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <input type="password" id="login-pass" placeholder="Contraseña..." required autofocus>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%;">Entrar al Panel</button>
+            </form>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Mobile Header -->
-        <header class="mobile-header glass-panel">
-            <h1>⛪ Admin</h1>
+        <header class="mobile-header">
+            <h1>⛪ Panel Iglesia</h1>
         </header>
 
         <!-- Sidebar (Desktop) -->
         <aside class="sidebar glass-panel">
             <div class="logo">
-                <h1>Panel de Administración</h1>
+                <h1>Administración</h1>
             </div>
             <nav>
                 <button class="nav-btn active" data-tab="dashboard">📊 Dashboard</button>
@@ -42,7 +57,7 @@
         </aside>
 
         <!-- Bottom Navigation (Mobile) -->
-        <nav class="mobile-nav glass-panel">
+        <nav class="mobile-nav">
             <button class="nav-btn active" data-tab="dashboard">📊</button>
             <button class="nav-btn" data-tab="predicadores">👥</button>
             <button class="nav-btn" data-tab="asignaciones">🗓️</button>
@@ -55,7 +70,7 @@
             <!-- Dashboard View -->
             <section id="dashboard" class="view active">
                 <header>
-                    <h2>Resumen del Sistema</h2>
+                    <h2>Resumen</h2>
                     <p>Bienvenido al gestor automático de predicadores.</p>
                 </header>
                 <div class="stats-grid">
@@ -89,15 +104,13 @@
                             <tr>
                                 <th>ID</th>
                                 <th>Nombre</th>
-                                <th>Teléfono (WhatsApp)</th>
+                                <th>Teléfono</th>
                                 <th>Disponibilidad</th>
                                 <th>Estado</th>
                                 <th>Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Data injected by JS -->
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </section>
@@ -110,8 +123,6 @@
                         <p>Agenda qué hermano predica cada sábado.</p>
                     </div>
                     <div style="display:flex; gap:0.5rem">
-                        <button class="btn-primary" style="background:var(--warning); color:#000; font-weight:700;"
-                            onclick="openModal('modal-sorteo')">🎲 Sorteo Rápido</button>
                         <button class="btn-primary" onclick="openModal('modal-asignacion')">+ Nueva Asignación</button>
                     </div>
                 </header>
@@ -127,9 +138,7 @@
                                 <th>Acciones</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Data injected by JS -->
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </section>
@@ -138,7 +147,7 @@
             <section id="mensajes" class="view">
                 <header>
                     <h2>Historial de Mensajes</h2>
-                    <p>Estado de envío y control de errores de Twilio.</p>
+                    <p>Estado de envío y control de errores.</p>
                 </header>
                 <div class="table-container glass-panel">
                     <table id="table-mensajes">
@@ -149,12 +158,10 @@
                                 <th>Tipo</th>
                                 <th>Fecha Envío</th>
                                 <th>Estado</th>
-                                <th>Intentos / Error</th>
+                                <th>Detalle</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <!-- Data injected by JS -->
-                        </tbody>
+                        <tbody></tbody>
                     </table>
                 </div>
             </section>
@@ -163,9 +170,8 @@
     </div>
 
     <!-- Modals -->
-    <!-- Modal Nuevo Hermano -->
     <div id="modal-hermano" class="modal-overlay">
-        <div class="modal glass-panel">
+        <div class="modal">
             <h3>Registrar Predicador</h3>
             <form id="form-hermano">
                 <div class="form-group">
@@ -176,10 +182,9 @@
                     <label>WhatsApp (con código de país)</label>
                     <input type="text" id="h-tel" placeholder="Ej: whatsapp:+56912345678" required>
                 </div>
-                <div class="form-group" style="flex-direction:row; align-items:center; gap:0.5rem; margin-top:10px;">
-                    <input type="checkbox" id="h-solo-tarde" style="width:auto; cursor:pointer;">
-                    <label for="h-solo-tarde" style="margin:0; cursor:pointer;">Solo puede predicar en la tarde
-                        (19:00)</label>
+                <div class="form-group" style="display:flex; align-items:center; gap:10px;">
+                    <input type="checkbox" id="h-solo-tarde" style="width: auto;">
+                    <label style="margin:0">Solo predica tarde (19:00)</label>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-text" onclick="closeModal('modal-hermano')">Cancelar</button>
@@ -189,16 +194,13 @@
         </div>
     </div>
 
-    <!-- Modal Nueva Asignación -->
     <div id="modal-asignacion" class="modal-overlay">
-        <div class="modal glass-panel">
+        <div class="modal">
             <h3>Programar Culto</h3>
             <form id="form-asignacion">
                 <div class="form-group">
                     <label>Predicador</label>
-                    <select id="a-predicador" required>
-                        <option value="">Cargando hermanos...</option>
-                    </select>
+                    <select id="a-predicador" required></select>
                 </div>
                 <div class="form-group">
                     <label>Sábado (Fecha)</label>
@@ -214,55 +216,15 @@
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-text" onclick="closeModal('modal-asignacion')">Cancelar</button>
-                    <button type="submit" class="btn-primary">Asignar y Programar Avisos</button>
+                    <button type="submit" class="btn-primary">Asignar</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Modal Sorteo Rápido -->
-    <div id="modal-sorteo" class="modal-overlay">
-        <div class="modal glass-panel">
-            <h3>🎲 Sorteo Rápido de Predicador</h3>
-            <p style="margin-bottom: 1rem; color: var(--text-muted); font-size: 0.9rem;">
-                El sistema elegirá al azar un hermano de la lista de hermanos activos.
-            </p>
-
-            <form id="form-sorteo">
-                <div class="form-group">
-                    <label>Sábado (Fecha)</label>
-                    <input type="date" id="s-fecha" required>
-                </div>
-                <div class="form-group">
-                    <label>Hora del Culto</label>
-                    <select id="s-hora" required>
-                        <option value="10:30" selected>10:30</option>
-                        <option value="15:00">15:00</option>
-                        <option value="19:00">19:00</option>
-                    </select>
-                </div>
-
-                <div id="ruleta-container"
-                    style="display:none; text-align:center; margin: 1.5rem 0; padding: 1rem; background: rgba(0,0,0,0.1); border-radius: 8px;">
-                    <h2 id="ruleta-texto"
-                        style="color: var(--primary); font-size: 1.8rem; margin: 0; animation: parpadeo 0.2s infinite alternate;">
-                        ...</h2>
-                </div>
-
-                <div class="modal-actions">
-                    <button type="button" class="btn-text" onclick="closeModal('modal-sorteo')"
-                        id="btn-cancel-sorteo">Cancelar</button>
-                    <button type="submit" class="btn-primary" id="btn-submit-sorteo"
-                        style="background:var(--warning); color:#000; font-weight:bold;">¡Sortear y Asignar!</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="admin.js?v=3"></script>
+    <script src="app.js?v=1"></script>
 </body>
 
 </html>

@@ -15,6 +15,12 @@ app.use(cors()); // Permitir que la App móvil se conecte desde internet
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+// ─── Logger de requests (diagnóstico inicial) ──────────────────────────────────
+app.use((req, res, next) => {
+  console.log(`[REQ] ${req.method} ${req.url}`);
+  next();
+});
+
 // 1. SERVIR ARCHIVOS ESTÁTICOS (CRUCIAL: Antes de cualquier middleware de seguridad)
 app.use(express.static(path.join(__dirname, 'public')));
 
